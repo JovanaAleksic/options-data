@@ -152,7 +152,7 @@ if all_contract_data:
     print(f"Collected data for {len(all_contract_data)} contracts")
     final = pd.DataFrame(all_contract_data)
     final.to_csv("options_spy.csv", index=False, sep=",")
-    print("Data saved to options_test.csv")
+    print("Data saved")
 else:
     print("No data collected!")
 
