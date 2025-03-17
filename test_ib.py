@@ -1,87 +1,169 @@
 from ib_insync import *
+import time
+import pandas as pd
 
 ib = IB()
 ib.connect('127.0.0.1', 7497, clientId=1)
 
-contract = Stock('VOO', 'SMART', 'USD')
+contract = Stock('SPY', 'SMART', 'USD')
 ib.qualifyContracts(contract)
-[ticker]=ib.reqTickers(contract)
-vooValue=ticker.marketPrice()
+[ticker] = ib.reqTickers(contract)
+spyValue = ticker.marketPrice()
 
-print(f"value: {vooValue}")
+print(f"value: {spyValue}")
 
-chains=ib.reqSecDefOptParams(contract.symbol, "", contract.secType, contract.conId)
-chain=next(c for c in chains if c.tradingClass == "VOO" and c.exchange == "SMART")
+chains = ib.reqSecDefOptParams(contract.symbol, "", contract.secType, contract.conId)
+chain = next(c for c in chains if c.tradingClass == "SPY" and c.exchange == "SMART")
 
 print(chain)
 
-strikes = [
-	strike for strike in chain.strikes
-	if strike % 5 == 0
-	and vooValue - 20 < strike < vooValue + 20
-	]
-# strikes = [strike for strike in chain.strikes]
-
-
+all_strikes = [strike for strike in chain.strikes]
 expirations = sorted(exp for exp in chain.expirations)[:]
 rights = ["C", "P"]
+strike_batch_size = 5
 
-print(expirations)
+print(f"Total possible strikes: {len(all_strikes)}")
+print(f"Total expirations: {len(expirations)}")
 
-contracts=[
-	Option("VOO", expiration, strike, right, "SMART", tradingClass="VOO")
-	for right in rights
-	for expiration in expirations
-	for strike in strikes
-	]
+# Master list to collect all data across batches
+all_contract_data = []
+
+for i in range(0, len(all_strikes), strike_batch_size):
+    strikes = all_strikes[i:i + strike_batch_size]
+    print(
+        f"Processing strikes batch {i // strike_batch_size + 1}/{(len(all_strikes) - 1) // strike_batch_size + 1}: {strikes}")
+
+    # Create contract definitions for this batch
+    batch_contract_defs = [
+        Option("SPY", expiration, strike, right, "SMART", tradingClass="SPY")
+        for right in rights
+        for expiration in expirations
+        for strike in strikes
+    ]
+
+    try:
+        # Try to qualify the contracts - this will filter out invalid combinations
+        valid_contracts = ib.qualifyContracts(*batch_contract_defs)
+        print(f"Qualified {len(valid_contracts)} valid contracts out of {len(batch_contract_defs)} possibilities")
+
+        if not valid_contracts:
+            print("No valid contracts in this batch, skipping...")
+            continue
+
+        # Request tickers only for valid contracts
+        tickers = ib.reqTickers(*valid_contracts)
+        print(f"Received {len(tickers)} tickers in batch")
+
+        if tickers:
+            print(f"Sample ticker: {tickers[0]}")
+
+        # Process the valid tickers
+        for t in tickers:
+            # Skip invalid/empty tickers
+            if not hasattr(t, 'contract') or not t.contract:
+                continue
+
+            # Extract contract properties
+            contract_dict = {
+                'conId': t.contract.conId,
+                'symbol': t.contract.symbol,
+                'lastTradeDateOrContractMonth': t.contract.lastTradeDateOrContractMonth,
+                'strike': t.contract.strike,
+                'right': t.contract.right,
+                'multiplier': t.contract.multiplier,
+                'exchange': t.contract.exchange,
+                'currency': t.contract.currency,
+                'localSymbol': t.contract.localSymbol,
+                'tradingClass': t.contract.tradingClass
+            }
+
+            # Extract ticker properties (same as before)
+            ticker_dict = {
+                'time': t.time,
+                'minTick': t.minTick,
+                'bid': t.bid,
+                'bidSize': t.bidSize,
+                'ask': t.ask,
+                'askSize': t.askSize,
+                'last': t.last if hasattr(t, 'last') else None,
+                'lastSize': t.lastSize if hasattr(t, 'lastSize') else None,
+                'high': t.high if hasattr(t, 'high') else None,
+                'low': t.low if hasattr(t, 'low') else None,
+                'volume': t.volume if hasattr(t, 'volume') else None,
+                'close': t.close,
+                'bboExchange': t.bboExchange if hasattr(t, 'bboExchange') else None,
+                'snapshotPermissions': t.snapshotPermissions if hasattr(t, 'snapshotPermissions') else None,
+                'undPrice': spyValue,  # Adding the underlying price
+            }
+
+            # Add bid Greeks if available
+            if hasattr(t, 'bidGreeks') and t.bidGreeks:
+                ticker_dict.update({
+                    'bid_impliedVol': t.bidGreeks.impliedVol,
+                    'bid_delta': t.bidGreeks.delta,
+                    'bid_optPrice': t.bidGreeks.optPrice,
+                    'bid_pvDividend': t.bidGreeks.pvDividend,
+                    'bid_gamma': t.bidGreeks.gamma,
+                    'bid_vega': t.bidGreeks.vega,
+                    'bid_theta': t.bidGreeks.theta,
+                    'bid_undPrice': t.bidGreeks.undPrice
+                })
+
+            # Add ask Greeks if available
+            if hasattr(t, 'askGreeks') and t.askGreeks:
+                ticker_dict.update({
+                    'ask_impliedVol': t.askGreeks.impliedVol,
+                    'ask_delta': t.askGreeks.delta,
+                    'ask_optPrice': t.askGreeks.optPrice,
+                    'ask_pvDividend': t.askGreeks.pvDividend,
+                    'ask_gamma': t.askGreeks.gamma,
+                    'ask_vega': t.askGreeks.vega,
+                    'ask_theta': t.askGreeks.theta,
+                    'ask_undPrice': t.askGreeks.undPrice
+                })
+
+            # Add last Greeks if available
+            if hasattr(t, 'lastGreeks') and t.lastGreeks:
+                ticker_dict.update({
+                    'last_impliedVol': t.lastGreeks.impliedVol,
+                    'last_delta': t.lastGreeks.delta,
+                    'last_optPrice': t.lastGreeks.optPrice,
+                    'last_pvDividend': t.lastGreeks.pvDividend,
+                    'last_gamma': t.lastGreeks.gamma,
+                    'last_vega': t.lastGreeks.vega,
+                    'last_theta': t.lastGreeks.theta,
+                    'last_undPrice': t.lastGreeks.undPrice
+                })
+
+            # Add model Greeks if available
+            if hasattr(t, 'modelGreeks') and t.modelGreeks:
+                ticker_dict.update({
+                    'model_impliedVol': t.modelGreeks.impliedVol,
+                    'model_delta': t.modelGreeks.delta,
+                    'model_optPrice': t.modelGreeks.optPrice,
+                    'model_pvDividend': t.modelGreeks.pvDividend,
+                    'model_gamma': t.modelGreeks.gamma,
+                    'model_vega': t.modelGreeks.vega,
+                    'model_theta': t.modelGreeks.theta,
+                    'model_undPrice': t.modelGreeks.undPrice
+                })
 
 
-contracts = ib.qualifyContracts(*contracts)
-tickers = ib.reqTickers(*contracts)
-print(tickers[0])
+            # Combine both dictionaries
+            entry = {**contract_dict, **ticker_dict}
+            all_contract_data.append(entry)
 
-# Capture all ticker attributes
-contractData = []
-for t in tickers:
-    # Extract contract properties
-    contract_dict = {
-        'conId': t.contract.conId,
-        'symbol': t.contract.symbol,
-        'lastTradeDateOrContractMonth': t.contract.lastTradeDateOrContractMonth,
-        'strike': t.contract.strike,
-        'right': t.contract.right,
-        'multiplier': t.contract.multiplier,
-        'exchange': t.contract.exchange,
-        'currency': t.contract.currency,
-        'localSymbol': t.contract.localSymbol,
-        'tradingClass': t.contract.tradingClass
-    }
+    except Exception as e:
+        print(f"Error processing batch: {e}")
 
-    # Extract ticker properties
-    ticker_dict = {
-        'time': t.time,
-        'minTick': t.minTick,
-        'bid': t.bid,
-        'bidSize': t.bidSize,
-        'ask': t.ask,
-        'askSize': t.askSize,
-        'last': t.last if hasattr(t, 'last') else None,
-        'lastSize': t.lastSize if hasattr(t, 'lastSize') else None,
-        'high': t.high if hasattr(t, 'high') else None,
-        'low': t.low if hasattr(t, 'low') else None,
-        'volume': t.volume if hasattr(t, 'volume') else None,
-        'close': t.close,
-        'bboExchange': t.bboExchange if hasattr(t, 'bboExchange') else None,
-        'snapshotPermissions': t.snapshotPermissions if hasattr(t, 'snapshotPermissions') else None,
-        'undPrice': vooValue  # Adding the underlying price
-    }
-
-    # Combine both dictionaries
-    entry = {**contract_dict, **ticker_dict}
-    contractData.append(entry)
-
-# Convert to DataFrame and save
-final = util.df(contractData)
-final.to_csv("options_test.csv", index=False, sep=",")
+# After all batches are processed, write everything to CSV once
+if all_contract_data:
+    print(f"Collected data for {len(all_contract_data)} contracts")
+    final = pd.DataFrame(all_contract_data)
+    final.to_csv("options_spy.csv", index=False, sep=",")
+    print("Data saved to options_test.csv")
+else:
+    print("No data collected!")
 
 ib.disconnect()
+print("IB connection closed")

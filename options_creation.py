@@ -1,193 +1,112 @@
 from ib_insync import *
-import pandas as pd
-from datetime import datetime, timedelta
 import time
-import os
-import math
 
-class OptionsDataCollector:
-    def __init__(self):
-        self.ib = IB()
-        self.tickers = ['VOO', 'TSLA', 'AAPL']
-        self.dataframes = {ticker: pd.DataFrame() for ticker in self.tickers}
-        self.save_path = 'options_data'
-        
-        if not os.path.exists(self.save_path):
-            os.makedirs(self.save_path)
+ib = IB()
+ib.connect('127.0.0.1', 7497, clientId=1)
 
-    def connect_to_ib(self):
-        try:
-            self.ib.connect('127.0.0.1', 4001, clientId=1)
-            self.ib.reqMarketDataType(3)  # 3 = Delayed data
-            print("Connected to Interactive Brokers")
-        except Exception as e:
-            print(f"Connection error: {str(e)}")
-            raise
+contract = Stock('VOO', 'SMART', 'USD')
+ib.qualifyContracts(contract)
+[ticker] = ib.reqTickers(contract)
+vooValue = ticker.marketPrice()
 
-    def get_current_price(self, ticker):
-        """Get current price using delayed market data if real-time is unavailable."""
-        try:
-            contract = Stock(ticker, 'SMART', 'USD')
-            qualified_contracts = self.ib.qualifyContracts(contract)
-            if not qualified_contracts:
-                raise ValueError(f"Could not qualify contract for {ticker}")
+print(f"value: {vooValue}")
 
-            ticker_data = self.ib.reqMktData(qualified_contracts[0], snapshot=True, regulatorySnapshot=False)  # Request delayed data
+chains = ib.reqSecDefOptParams(contract.symbol, "", contract.secType, contract.conId)
+chain = next(c for c in chains if c.tradingClass == "VOO" and c.exchange == "SMART")
 
-            # Wait for data to arrive (up to 10 seconds)
-            for _ in range(20):  # 20 * 0.5 = 10 seconds
-                self.ib.sleep(0.5)
-                if ticker_data.last or ticker_data.close:
-                    break
+print(chain)
 
-            price = ticker_data.last if ticker_data.last else ticker_data.close
-            if price and not math.isnan(price):
-                return price
+# Get all strikes
+all_strikes = sorted([strike for strike in chain.strikes])[:]
+expirations = sorted(exp for exp in chain.expirations)[:]
+rights = ["C", "P"]
 
-            raise ValueError(f"No valid price data for {ticker}")
+print(f"Total strikes: {len(all_strikes)}")
+print(f"Total expirations: {len(expirations)}")
 
-        except Exception as e:
-            print(f"Error getting price for {ticker}: {str(e)}")
-            return None
+# Define batch sizes
+strike_batch_size = 5  # Process 5 strikes at a time
+batch_delay = 0.5  # Sleep time between batches in seconds
 
+# Initialize contractData list to store all results
+all_contract_data = []
 
-    def get_nearest_expiries(self):
-        """Get today's and tomorrow's expiry dates"""
-        today = datetime.now()
-        tomorrow = today + timedelta(days=1)
-        return [today.strftime('%Y%m%d'), tomorrow.strftime('%Y%m%d')]
+# Process in batches of strikes
+for i in range(0, len(all_strikes), strike_batch_size):
+    batch_strikes = all_strikes[i:i + strike_batch_size]
+    print(
+        f"Processing strikes batch {i // strike_batch_size + 1}/{(len(all_strikes) - 1) // strike_batch_size + 1}: {batch_strikes}")
 
-    def get_atm_strikes(self, ticker):
-        """Get at-the-money strike prices with better error handling"""
-        current_price = self.get_current_price(ticker)
-        
-        if current_price is None or math.isnan(current_price):
-            print(f"Unable to get valid price for {ticker}")
-            return []
-            
-        try:
-            # Get strikes around current price
-            base_strike = round(current_price)
-            strikes = [
-                base_strike - 2,
-                base_strike - 1,
-                base_strike,
-                base_strike + 1,
-                base_strike + 2
-            ]
-            return [strike for strike in strikes if strike > 0]
-            
-        except Exception as e:
-            print(f"Error calculating strikes for {ticker}: {str(e)}")
-            return []
+    # Create contracts for this batch of strikes
+    batch_contracts = [
+        Option("VOO", expiration, strike, right, "SMART", tradingClass="VOO")
+        for right in rights
+        for expiration in expirations
+        for strike in batch_strikes
+    ]
 
-    def create_option_contracts(self, ticker):
-        """Create option contracts for both calls and puts"""
-        contracts = []
-        expiries = self.get_nearest_expiries()
-        strikes = self.get_atm_strikes(ticker)
-        
-        if not strikes:
-            print(f"No valid strikes found for {ticker}")
-            return []
+    try:
+        # Qualify and request tickers for this batch
+        qualified_contracts = ib.qualifyContracts(*batch_contracts)
+        batch_tickers = ib.reqTickers(*qualified_contracts)
 
-        for expiry in expiries:
-            for strike in strikes:
-                for right in ['C', 'P']:
-                    contract = Option(ticker, expiry, strike, right, 'SMART', 'USD')
-                    contracts.append(contract)
-        
-        return contracts
-
-    def process_market_data(self, ticker, data):
-        """Process market data and add to dataframe"""
-        try:
-            if not data or not data.contract.right in ['C', 'P']:
-                return
-
-            current_time = datetime.now()
-            
-            new_row = {
-                'timestamp': current_time,
-                'ticker': ticker,
-                'expiry': data.contract.lastTradeDateOrContractMonth,
-                'strike': data.contract.strike,
-                'right': data.contract.right,
-                'bid': data.bid if not math.isnan(data.bid) else None,
-                'ask': data.ask if not math.isnan(data.ask) else None,
-                'last': data.last if not math.isnan(data.last) else None,
-                'volume': data.volume if not math.isnan(data.volume) else 0,
-                'iv': data.impliedVolatility if not math.isnan(data.impliedVolatility) else None
+        # Extract data from this batch
+        for t in batch_tickers:
+            # Extract contract properties
+            contract_dict = {
+                'conId': t.contract.conId,
+                'symbol': t.contract.symbol,
+                'lastTradeDateOrContractMonth': t.contract.lastTradeDateOrContractMonth,
+                'strike': t.contract.strike,
+                'right': t.contract.right,
+                'multiplier': t.contract.multiplier,
+                'exchange': t.contract.exchange,
+                'currency': t.contract.currency,
+                'localSymbol': t.contract.localSymbol,
+                'tradingClass': t.contract.tradingClass
             }
-            
-            self.dataframes[ticker] = pd.concat([self.dataframes[ticker], 
-                                               pd.DataFrame([new_row])], 
-                                              ignore_index=True)
-        except Exception as e:
-            print(f"Error processing market data for {ticker}: {str(e)}")
 
-    def save_data(self):
-        """Save dataframes to CSV files"""
-        current_time = datetime.now().strftime('%Y%m%d_%H')
-        for ticker in self.tickers:
-            if not self.dataframes[ticker].empty:
-                filename = f"{self.save_path}/{ticker}_options_{current_time}.csv"
-                self.dataframes[ticker].to_csv(filename, index=False)
-                print(f"Data saved for {ticker} at {current_time}")
+            # Extract ticker properties
+            ticker_dict = {
+                'time': t.time,
+                'minTick': t.minTick,
+                'bid': t.bid,
+                'bidSize': t.bidSize,
+                'ask': t.ask,
+                'askSize': t.askSize,
+                'last': t.last if hasattr(t, 'last') else None,
+                'lastSize': t.lastSize if hasattr(t, 'lastSize') else None,
+                'high': t.high if hasattr(t, 'high') else None,
+                'low': t.low if hasattr(t, 'low') else None,
+                'volume': t.volume if hasattr(t, 'volume') else None,
+                'close': t.close,
+                'bboExchange': t.bboExchange if hasattr(t, 'bboExchange') else None,
+                'snapshotPermissions': t.snapshotPermissions if hasattr(t, 'snapshotPermissions') else None,
+                'undPrice': vooValue  # Adding the underlying price
+            }
 
-    def run(self):
-        """Main run loop"""
-        last_save = datetime.now()
-        
-        try:
-            self.connect_to_ib()
-            
-            while True:
-                for ticker in self.tickers:
-                    try:
-                        print(f"Processing {ticker}...")
-                        contracts = self.create_option_contracts(ticker)
-                        
-                        if not contracts:
-                            print(f"No valid contracts created for {ticker}")
-                            continue
-                            
-                        # Request market data for each contract
-                        for contract in contracts:
-                            try:
-                                qualified = self.ib.qualifyContracts(contract)
-                                if qualified:
-                                    market_data = self.ib.reqMktData(qualified[0],snapshot=False, regulatorySnapshot=False)
-                                    self.ib.sleep(1)  # Wait for data to arrive
-                                    self.process_market_data(ticker, market_data)
-                            except Exception as e:
-                                print(f"Error processing contract for {ticker}: {str(e)}")
-                                continue
-                            
-                    except Exception as e:
-                        print(f"Error processing {ticker}: {str(e)}")
-                        continue
+            # Combine both dictionaries
+            entry = {**contract_dict, **ticker_dict}
+            all_contract_data.append(entry)
 
-                # Save data every hour
-                if (datetime.now() - last_save).seconds >= 3600:
-                    self.save_data()
-                    last_save = datetime.now()
+        print(f"Batch completed. Collected {len(batch_tickers)} tickers.")
 
-                # Wait until next minute
-                time.sleep(10)
+    except Exception as e:
+        print(f"Error processing batch: {e}")
 
-        except KeyboardInterrupt:
-            print("\nStopping data collection...")
-            self.save_data()
-        
-        except Exception as e:
-            print(f"Critical error: {str(e)}")
-            
-        finally:
-            if self.ib.isConnected():
-                self.ib.disconnect()
-                print("Disconnected from Interactive Brokers")
+    # Sleep between batches to avoid rate limiting
+    if i + strike_batch_size < len(all_strikes):
+        print(f"Sleeping for {batch_delay} seconds before next batch...")
+        time.sleep(batch_delay)
 
-if __name__ == "__main__":
-    collector = OptionsDataCollector()
-    collector.run()
+# Convert all collected data to DataFrame and save
+if all_contract_data:
+    final = util.df(all_contract_data)
+    print(f"Total contracts collected: {len(final)}")
+    final.to_csv("all_options_data.csv", index=False, sep=",")
+    print("Data saved to all_options_data.csv")
+else:
+    print("No data collected!")
+
+ib.disconnect()
+print("IB connection closed")
