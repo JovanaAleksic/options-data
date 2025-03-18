@@ -75,11 +75,7 @@ def is_holiday():
 
 def collect_spy_options():
     """Collect SPY options data and update the CSV file"""
-    # We don't need to check market hours here anymore since scheduling is smarter
-    print(f"{datetime.datetime.now()}: Starting SPY options data collection...")
-
-    print(f"{datetime.datetime.now()}: Starting SPY options data collection...")
-
+    print(f"Starting SPY options data collection...")
     try:
         # Connect to IB
         ib = IB()
@@ -249,15 +245,19 @@ def collect_spy_options():
 
 
 def run_scheduler():
-    """Set up the scheduler to run the collection job every hour during market hours"""
-    # Run the job every hour on the hour
-    schedule.every().hour.at(":00").do(collect_spy_options)
+    def scheduled_task():
+        if is_market_open() and not is_holiday():
+            collect_spy_options()
+        else:
+            print(f"{datetime.datetime.now(pytz.timezone('US/Eastern'))}: Market is closed. Skipping data collection.")
 
-    print("Scheduler started. Will collect SPY options data hourly during market hours.")
-    print("Press Ctrl+C to exit.")
+    # Schedule the task every 5 minutes
+    schedule.every(5).minutes.do(scheduled_task)
+
+    print("Scheduler started. Will collect SPY options data every 5 minutes during market hours.")
 
     # Run once immediately
-    collect_spy_options()
+    scheduled_task()
 
     # Keep the script running
     while True:

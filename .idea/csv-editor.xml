@@ -10,6 +10,20 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="/options_spy_historical.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/options_spy_latest.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="/options_test.csv">
           <value>
             <Attribute>

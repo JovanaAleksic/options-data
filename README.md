@@ -4,16 +4,16 @@ This repository contains code for collecting hourly SPY options data from Intera
 
 ## Overview
 
-The project automatically collects SPY options data through the Interactive Brokers API using the `ib_insync` library. It focuses on options within 5% of the current SPY price and the next two expiration dates, gathering complete pricing information including Greeks.
+The project automatically collects SPY options data through the Interactive Brokers API using the `ib_insync` library. It focuses on options within 5% of the current SPY price and the 0 DTE and 1 DTE expiration dates, gathering complete pricing information including Greeks.
 
 ## Data Collection Process
 
 The data collection script (`options_creation.py`) connects to IBKR, fetches options data, and saves it to CSV files with the following features:
 
-- Runs hourly during US market hours (9:30 AM - 4:00 PM Eastern Time)
+- Runs every 5 minutes during US market hours (9:30 AM - 4:00 PM Eastern Time)
 - Only collects on weekdays that aren't US market holidays
 - Maintains both historical and latest snapshots of data
-- Includes all Greeks (delta, gamma, theta, vega) from multiple price sources
+- Includes all Greeks (delta, gamma, theta, vega) 
 
 ### Technical Details
 
@@ -71,17 +71,8 @@ python options_creation.py
 The script will automatically:
 - Check if it's a trading day
 - Schedule collections for market hours
-- Save data hourly
+- Save data every 5 minutes
 - Sleep efficiently between collections
-
-## Scheduler Logic
-
-The scheduler is designed to be resource-efficient:
-
-- Performs an initial check at 7:00 AM ET to determine if it's a trading day
-- If it's a trading day, schedules all collection points for the day (9:30 AM, 10:00 AM, ...)
-- Sleeps efficiently between collections rather than constantly checking
-- Reschedules automatically for the next trading day
 
 ## Notes
 
