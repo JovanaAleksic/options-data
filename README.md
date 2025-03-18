@@ -1,6 +1,6 @@
 # IBKR SPY Options Data Collector
 
-This repository contains code for collecting hourly SPY options data from Interactive Brokers (IBKR) during market hours on trading days.
+This repository contains code for collecting SPY options data from Interactive Brokers (IBKR) during market hours on trading days.
 
 ## Overview
 
@@ -61,7 +61,7 @@ pip install ib_insync pandas schedule pytz
 
 ## Usage
 
-1. Ensure IBKR Trader Workstation or IB Gateway is running and accepting API connections on port 7497
+1. Ensure IBKR Trader Workstation or IB Gateway is running and accepting API connections on port 7497, or adjust the port number within the script
 2. Run the data collection script:
 
 ```bash
