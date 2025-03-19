@@ -121,7 +121,6 @@ def collect_spy_options():
 
         # Process the valid tickers
         for t in tickers:
-            # Skip invalid/empty tickers
             if not hasattr(t, 'contract') or not t.contract:
                 continue
 
