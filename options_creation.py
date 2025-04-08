@@ -35,8 +35,8 @@ def get_holidays(year):
         # Presidents' Day (third Monday in February)
         datetime.datetime(year, 2, 15) + datetime.timedelta(
             days=(0 - datetime.datetime(year, 2, 15).weekday() + 7) % 7),
-        # Good Friday (approximate)
-        datetime.datetime(year, 4, 7),
+        # Good Friday
+        datetime.datetime(year, 4, 18),
         # Memorial Day (last Monday in May)
         datetime.datetime(year, 5, 31) - datetime.timedelta(days=datetime.datetime(year, 5, 31).weekday()),
         # Juneteenth
@@ -221,7 +221,7 @@ def collect_spy_options():
         # Now create or append to the CSV file
         if all_contract_data:
             current_data = pd.DataFrame(all_contract_data)
-            file_path = "options_spy_historical.csv"
+            file_path = "options_spy_historical1.csv"
 
             # Check if file exists to determine whether to append or create new
             if os.path.exists(file_path):
