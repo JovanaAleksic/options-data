@@ -4,21 +4,22 @@ This repository contains code for collecting SPY options data from Interactive B
 
 ## Overview
 
-The project automatically collects SPY options data through the Interactive Brokers API using the `ib_insync` library. It focuses on options within 5% of the current SPY price and the 0 DTE and 1 DTE expiration dates, gathering complete pricing information including Greeks.
+The project automatically collects SPY options data through the Interactive Brokers API using the `ib_insync` library. Until 9th of April 2025 it was focusing on options within 5% of the current SPY price and the 0 DTE and 1 DTE expiration dates, gathering complete pricing information including Greeks, every 5 minutes.
+From the April 10th accumulates options for all available strikes and expiration dates, every minute.
 
 ## Data Collection Process
 
 The data collection script (`options_creation.py`) connects to IBKR, fetches options data, and saves it to CSV files with the following features:
 
-- Runs every 5 minutes during US market hours (9:30 AM - 4:00 PM Eastern Time)
+- Runs every 1 minute during US market hours (9:30 AM - 4:00 PM Eastern Time)
 - Only collects on weekdays that aren't US market holidays
 - Maintains both historical and latest snapshots of data
 - Includes all Greeks (delta, gamma, theta, vega) 
 
 ### Technical Details
 
-- Collects options with strikes within +/- 5% of current SPY price
-- Captures short term options: 0DTE and 1DTE
+- Collects options with strikes within +/- 5% of current SPY price - updated
+- Captures short term options: 0DTE and 1DTE - updated
 - Includes both calls and puts
 - Tracks full option contract details and pricing metrics
 
@@ -71,7 +72,7 @@ python options_creation.py
 The script will automatically:
 - Check if it's a trading day
 - Schedule collections for market hours
-- Save data every 5 minutes
+- Save data every 5 minutes - now updated to 1 minute
 - Sleep efficiently between collections
 
 ## Notes
