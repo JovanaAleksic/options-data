@@ -91,10 +91,10 @@ def collect_spy_options():
         chains = ib.reqSecDefOptParams(contract.symbol, "", contract.secType, contract.conId)
         chain = next(c for c in chains if c.tradingClass == "SPY" and c.exchange == "SMART")
 
-        # Get strikes within +/- 5% of current price
-        all_strikes = [strike for strike in chain.strikes
-                       if strike < spyValue * 1.05 and strike > spyValue * 0.95]
-        expirations = sorted(exp for exp in chain.expirations)[:2]  # 0DTE and 1DTE
+        # Get strikes within +/- 5% of current price - changed to all strikes
+        all_strikes = [strike for strike in chain.strikes]
+        #               if strike < spyValue * 1.05 and strike > spyValue * 0.95]
+        expirations = sorted(exp for exp in chain.expirations)[:]  # 0DTE and 1DTE - changed to all expirations
         rights = ["C", "P"]
 
         print(f"Total possible strikes: {len(all_strikes)}")
@@ -133,10 +133,10 @@ def collect_spy_options():
                 'strike': t.contract.strike,
                 'right': t.contract.right,
                 'multiplier': t.contract.multiplier,
-                'exchange': t.contract.exchange,
+                # 'exchange': t.contract.exchange,
                 'currency': t.contract.currency,
-                'localSymbol': t.contract.localSymbol,
-                'tradingClass': t.contract.tradingClass
+                # 'localSymbol': t.contract.localSymbol,
+                # 'tradingClass': t.contract.tradingClass
             }
 
             # Extract ticker properties
@@ -153,8 +153,8 @@ def collect_spy_options():
                 'low': t.low if hasattr(t, 'low') else None,
                 'volume': t.volume if hasattr(t, 'volume') else None,
                 'close': t.close,
-                'bboExchange': t.bboExchange if hasattr(t, 'bboExchange') else None,
-                'snapshotPermissions': t.snapshotPermissions if hasattr(t, 'snapshotPermissions') else None,
+                # 'bboExchange': t.bboExchange if hasattr(t, 'bboExchange') else None,
+                # 'snapshotPermissions': t.snapshotPermissions if hasattr(t, 'snapshotPermissions') else None,
                 'undPrice': spyValue,  # Adding the underlying price
             }
 
@@ -221,7 +221,7 @@ def collect_spy_options():
         # Now create or append to the CSV file
         if all_contract_data:
             current_data = pd.DataFrame(all_contract_data)
-            file_path = "options_spy_historical1.csv"
+            file_path = "options_spy_historical3.csv"
 
             # Check if file exists to determine whether to append or create new
             if os.path.exists(file_path):
@@ -250,10 +250,10 @@ def run_scheduler():
         else:
             print(f"{datetime.datetime.now(pytz.timezone('US/Eastern'))}: Market is closed. Skipping data collection.")
 
-    # Schedule the task every 5 minutes
-    schedule.every(5).minutes.do(scheduled_task)
+    # Schedule the task every 1 minute
+    schedule.every(1).minutes.do(scheduled_task)
 
-    print("Scheduler started. Will collect SPY options data every 5 minutes during market hours.")
+    print("Scheduler started. Will collect SPY options data every 1 minute during market hours.")
 
     # Run once immediately
     scheduled_task()
